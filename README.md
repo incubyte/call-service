@@ -49,6 +49,3 @@ Open the `.env` file to configure the following settings
 3. Register an EventGrid Webhook for the IncomingCall Event that points to your 8080 port URI (ex. `https://<devtunnel>/api/incomingCall`). Instructions [here](https://learn.microsoft.com/en-us/azure/communication-services/concepts/call-automation/incoming-call-notification).
 
 Once that's completed you should have a running application. The best way to test this is to place a call to your ACS phone number
-
-
-https://wtjnq7gb.inc1.devtunnels.ms/api/incomingCall 
