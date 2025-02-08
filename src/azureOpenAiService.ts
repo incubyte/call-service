@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { config } from 'dotenv';
-import { LowLevelRTClient, ServerMessageType, SessionUpdateMessage, ResponseFunctionCallArgumentsDoneMessage, ItemCreateMessage } from "rt-client";
+import { LowLevelRTClient, SessionUpdateMessage, ServerMessageType, ResponseFunctionCallArgumentsDoneMessage, ItemCreateMessage } from "rt-client";
 import { OutStreamingData } from '@azure/communication-call-automation';
 config();
 
@@ -122,15 +122,16 @@ async function executeFunctionCall(message: ServerMessageType) {
     try {
         const functionCallMessage = message as ResponseFunctionCallArgumentsDoneMessage;
         const result = await referToMedicalDatabase(functionCallMessage.arguments);
-        const responseMessage: ItemCreateMessage = {
-            type: "conversation.item.create",
-            item: {
-                type: "function_call_output",
-                call_id: functionCallMessage.call_id,
-                output: result
-            }
-        };
-        await realtimeStreaming.send(responseMessage);
+        console.log("Function Call Results:", result);
+        // const responseMessage: ItemCreateMessage = {
+        //     type: "conversation.item.create",
+        //     item: {
+        //         type: "function_call_output",
+        //         call_id: functionCallMessage.call_id,
+        //         output: result
+        //     }
+        // };
+        // await realtimeStreaming.send(responseMessage);
     } catch (error) {
         console.error('Error handling function call:', error);
     }
@@ -195,10 +196,20 @@ async function receiveAudioForOutbound(data: string) {
     }
 }
 
-async function sendMessage(data:string) {
-    if (ws.readyState === WebSocket.OPEN) {
-        ws.send(data);
-    } else {
-        console.log("socket connection is not open.")
+async function sendMessage(data: string) {
+    const maxRetries = 5;
+    let retries = 0;
+
+    while (retries < maxRetries) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(data);
+            return;
+        } else {
+            console.log(`WebSocket is not open. ReadyState: ${ws.readyState}. Retrying... (${retries + 1}/${maxRetries})`);
+            retries++;
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second before retrying
+        }
     }
+
+    console.error("Failed to send message: WebSocket connection is not open.");
 }
