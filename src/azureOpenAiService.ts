@@ -92,24 +92,18 @@ function createConfigMessage(): SessionUpdateMessage {
             tools: [
                 {
                     type: "function",
-                    function: {
-                        name: "referToMedicalDatabase",
-                        desciption: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
-                        parameters: {
-                            type: "object",
-                            properties: {
-                                user_query: {
-                                    type: "string",
-                                    description: "User query to refer to medical database"
-                                }    
-                            }
-                        },
-                        required: [
-                            "user_query"
-                        ],
-                        additionalProperties: false
+                    name: "referToMedicalDatabase",
+                    desciption: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            user_query: {
+                                type: "string",
+                                description: "User query to refer to medical database"
+                            }    
+                        }
                     }
-                }
+                }                
             ],
             tool_choice: "auto",
         }
