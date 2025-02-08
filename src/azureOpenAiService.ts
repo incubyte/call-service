@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import { config } from 'dotenv';
-import { LowLevelRTClient, SessionUpdateMessage } from "rt-client";
+import { LowLevelRTClient, ServerMessageType, SessionUpdateMessage, ResponseFunctionCallArgumentsDoneMessage, ItemCreateMessage } from "rt-client";
 import { OutStreamingData } from '@azure/communication-call-automation';
 config();
 
@@ -10,7 +10,7 @@ const openAiServiceEndpoint = process.env.AZURE_OPENAI_SERVICE_ENDPOINT || "";
 const openAiKey = process.env.AZURE_OPENAI_SERVICE_KEY || "";
 const openAiDeploymentModel = process.env.AZURE_OPENAI_DEPLOYMENT_MODEL_NAME || "";
 
-const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. After that ask them how you can help them`
+const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them.`
 
 let realtimeStreaming: LowLevelRTClient;
 
@@ -53,6 +53,27 @@ async function startRealtime(endpoint: string, apiKey: string, deploymentOrModel
     });
 }
 
+
+async function referToMedicalDatabase(user_query: string): Promise<any> {
+    try {
+        console.log('Referring to medical database for: ', user_query);
+        if (user_query.match(/appointment/i)) {
+            return "You have an appointment with Dr. Smith on 12th August 2021 at 10:00 AM";
+        }
+        if (user_query.match(/prescription/i)) {
+            return "You have a prescription for 5mg of Lisinopril";
+        }
+        if (user_query.match(/lab results/i)) {
+            return "Your lab results are normal";
+        }
+        return "Please call back after some time";
+    } catch (error) {
+        console.error('Error referring to medical database:', error);
+        throw error;
+    }
+}
+
+
 function createConfigMessage(): SessionUpdateMessage {
 
     let configMessage: SessionUpdateMessage = {
@@ -67,11 +88,52 @@ function createConfigMessage(): SessionUpdateMessage {
             },
             input_audio_transcription: {
                 model: "whisper-1"
-            }
+            },
+            tools: [
+                {
+                    type: "function",
+                    function: {
+                        name: "referToMedicalDatabase",
+                        desciption: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
+                        parameters: {
+                            type: "object",
+                            properties: {
+                                user_query: {
+                                    type: "string",
+                                    description: "User query to refer to medical database"
+                                }    
+                            }
+                        },
+                        required: [
+                            "user_query"
+                        ],
+                        additionalProperties: false
+                    }
+                }
+            ],
+            tool_choice: "auto",
         }
     };
 
     return configMessage;
+}
+
+async function executeFunctionCall(message: ServerMessageType) {
+    try {
+        const functionCallMessage = message as ResponseFunctionCallArgumentsDoneMessage;
+        const result = await referToMedicalDatabase(functionCallMessage.arguments);
+        const responseMessage: ItemCreateMessage = {
+            type: "conversation.item.create",
+            item: {
+                type: "function_call_output",
+                call_id: functionCallMessage.call_id,
+                output: result
+            }
+        };
+        await realtimeStreaming.send(responseMessage);
+    } catch (error) {
+        console.error('Error handling function call:', error);
+    }
 }
 
 export async function handleRealtimeMessages() {
@@ -81,6 +143,10 @@ export async function handleRealtimeMessages() {
                 console.log("session started with id:-->" + message.session.id)
                 break;
             case "response.audio_transcript.delta":
+                break;
+            case "response.function_call_arguments.done":
+                console.log("Function call arguments done");
+                await executeFunctionCall(message);
                 break;
             case "response.audio.delta":
                 await receiveAudioForOutbound(message.delta)
