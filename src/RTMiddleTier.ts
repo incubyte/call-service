@@ -44,7 +44,8 @@ const referToMedicalDatabaseToolSchema = {
               description: "User query to refer to medical database"
           }    
       },
-      required: ["user_query"]
+      required: ["user_query"],
+      additionalProperties: false
   }
 };
 
@@ -103,11 +104,20 @@ export class RTMiddleTier {
 
     switch (message.type) {
       case 'session.created':
+        console.log("[SESSION] Creating new session with tools");
         const session = message.session;
-        session.instructions = 'You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them.';
+        session.instructions = `You are an AI assistant that helps people find information about their medical records. 
+        You MUST ALWAYS use the referToMedicalDatabase function when users ask about:
+        - appointments
+        - prescriptions
+        - lab results
+
+        DO NOT make up responses. ALWAYS use the function to get accurate information.
+        First, say Hello and ask for the person's name. After they respond, ask how you can help them.`;
         session.tools = [
           referToMedicalDatabaseToolSchema
         ];
+        console.log("[SESSION] Tools configured:", session.tools);
         session.voice = this.voiceChoice;
         session.tool_choice = 'auto';
         session.max_response_output_tokens = null;
@@ -121,13 +131,24 @@ export class RTMiddleTier {
         break;
 
       case 'conversation.item.created':
-        console.log("--------------------------------");
-        console.log("message.item.type | client", message.item.type);
-        console.log("--------------------------------");
+        console.log("[CONVERSATION] Full message:", JSON.stringify(message, null, 2));
+        console.log("[CONVERSATION] Item created:", {
+          type: message.item?.type,
+          name: message.item?.name,
+          content: message.item?.content,
+          role: message.item?.role
+        });
 
         if (message.item?.type === 'function_call') {
           const item = message.item;
+          console.log("[TOOL] Function call received:", {
+            name: item.name,
+            arguments: item.arguments,
+            call_id: item.call_id
+          });
+          
           if (!this.toolsPending.has(item.call_id)) {
+            console.log("[TOOL] Adding to pending tools");
             this.toolsPending.set(item.call_id, {
               tool_call_id: item.call_id,
               previous_id: message.previous_item_id,
@@ -146,39 +167,49 @@ export class RTMiddleTier {
         break;
 
       case 'response.output_item.done':
-        // console.log("--------------------------------");
-        // console.log("message.item.type | client", message.item.type);
-        // console.log("--------------------------------");
+        console.log("[RESPONSE] Output item done:", {
+          type: message.item?.type,
+          name: message.item?.name,
+          content: message.item?.content
+        });
 
         if (message.item?.type === 'function_call') {
+          console.log("[TOOL] Processing function call completion:", message.item.name);
           const item = message.item;
           const toolCall = this.toolsPending.get(item.call_id);
           const tool = this.tools.get(item.name);
 
           if (toolCall && tool) {
+            console.log("[TOOL] Executing tool:", item.name);
             const args = JSON.parse(item.arguments);
             const result = await tool.target(args);
+            console.log("[TOOL] Tool execution completed");
 
-            await this.sendJson(serverWs, {
-              type: 'conversation.item.create',
-              item: {
-                type: 'function_call_output',
-                call_id: item.call_id,
-                output:
-                  result.destination === ToolResultDirection.TO_SERVER
-                    ? this.resultToText(result)
-                    : '',
-              },
-            });
+            // Send result back to server
+            if (result.destination === ToolResultDirection.TO_SERVER) {
+              console.log("[TOOL] Sending result to server");
+              await this.sendJson(serverWs, {
+                type: 'conversation.item.create',
+                item: {
+                  type: 'function_call_output',
+                  call_id: item.call_id,
+                  output: this.resultToText(result)
+                }
+              });
+            }
 
+            // Send result to client if needed
             if (result.destination === ToolResultDirection.TO_CLIENT) {
+              console.log("[TOOL] Sending result to client:", result);
               await this.sendJson(clientWs, {
                 type: 'extension.middle_tier_tool_response',
                 previous_item_id: toolCall.previous_id,
                 tool_name: item.name,
-                tool_result: this.resultToText(result),
+                tool_result: this.resultToText(result)
               });
             }
+          } else {
+            console.log("[TOOL] Tool call or tool not found:", item.name);
           }
           updatedMessage = null;
         }
@@ -222,17 +253,24 @@ export class RTMiddleTier {
     }
 
     if (message.type === 'session.update') {
+      console.log("[SESSION] Processing session update");
       const session: Session = message.session;
-      if (this.systemMessage) session.instructions = this.systemMessage;
+      if (this.systemMessage) {
+        console.log("[SESSION] Applying system message override");
+        session.instructions = this.systemMessage;
+      }
       if (this.temperature) session.temperature = this.temperature;
       if (this.maxTokens) session.max_response_output_tokens = this.maxTokens;
       if (this.disableAudio !== undefined) session.disable_audio = this.disableAudio;
       if (this.voiceChoice) session.voice = this.voiceChoice;
-      session.tool_choice = this.tools.size > 0 ? 'auto' : 'none';
+      if (this.tools.size > 0) {
+        console.log("[SESSION] Configuring tools:", Array.from(this.tools.keys()));
+        session.tool_choice = 'auto';
+        session.tools = Array.from(this.tools.values()).map(tool => tool.schema);
+      }
       // console.log("--------------------------------");
       // console.log("session.tool_choice | server", session.tool_choice);
       // console.log("--------------------------------");
-      session.tools = Array.from(this.tools.values()).map(tool => tool.schema);
       updatedMessage = JSON.stringify(message);
       console.log(updatedMessage);
     }
@@ -241,55 +279,49 @@ export class RTMiddleTier {
   }
 
   private async handleConnection(clientWs: WebSocket): Promise<void> {
-    const headers: { [key: string]: string } = {};
-    if (this.key) {
-      headers['api-key'] = this.key;
-    } else if (this.tokenProvider) {
-      headers['Authorization'] = `Bearer ${this.tokenProvider()}`;
-    }
-
-    const serverWs = new WSClient(
+    console.log("[CONNECT] New client connection attempting to establish");
+    
+    const serverWs = new WebSocket(
       `${this.endpoint}/openai/realtime?api-version=${this.apiVersion}&deployment=${this.deployment}`,
       {
-        headers,
+        headers: this.getHeaders(),
       }
     );
 
-    // Wait for server connection to be established
+    // Wait for server connection
     await new Promise((resolve, reject) => {
       serverWs.on('open', () => {
-        console.log("Server connection established");
+        console.log("[CONNECT] Server WebSocket connection established");
         resolve(true);
       });
-      serverWs.on('error', reject);
-      // Add timeout
+      serverWs.on('error', (error) => {
+        console.error("[ERROR] Server WebSocket connection failed:", error);
+        reject(error);
+      });
       setTimeout(() => reject(new Error('Connection timeout')), 10000);
-    });
-
-    serverWs.on('close', () => {
-      console.log("server connection closed");
     });
 
     const handleClientMessages = async () => {
       clientWs.on('message', async (data: WebSocket.Data) => {
-        // console.log("--------------------------------");
-        // console.log("handling client messages");
-        // console.log("--------------------------------");
         try {
-          const msg = data.toString();
-          const processedMsg = await this.processMessageToServer(JSON.parse(msg));
+          const msg = JSON.parse(data.toString());
+          console.log("[CLIENT->SERVER] Message type:", msg.type);
+          
+          const processedMsg = await this.processMessageToServer(msg);
           if (processedMsg && serverWs.readyState === WebSocket.OPEN) {
+            console.log("[CLIENT->SERVER] Forwarding processed message");
             serverWs.send(processedMsg);
+          } else {
+            console.log("[CLIENT->SERVER] Message dropped or connection closed");
           }
         } catch (error) {
-          console.error('Error processing client message:', error);
+          console.error("[ERROR] Processing client message:", error);
         }
       });
 
       clientWs.on('close', () => {
-        console.log('Client connection closed');
+        console.log("[DISCONNECT] Client connection closed");
         if (serverWs.readyState === WebSocket.OPEN) {
-          console.log("closing server connection");
           serverWs.close();
         }
       });
@@ -298,20 +330,22 @@ export class RTMiddleTier {
     const handleServerMessages = async () => {
       serverWs.on('message', async (data: WebSocket.Data) => {
         try {
-          const msg = data.toString();
-          const processedMsg = await this.processMessageToClient(
-            JSON.parse(msg),
-            clientWs,
-            serverWs
-          );
+          const msg = JSON.parse(data.toString());
+          console.log("[SERVER->CLIENT] Message type:", msg.type);
+          
+          if (msg.type === 'conversation.item.created' && msg.item?.type === 'function_call') {
+            console.log("[TOOL] Function call detected:", msg.item.name);
+          }
+
+          const processedMsg = await this.processMessageToClient(msg, clientWs, serverWs);
           if (processedMsg && clientWs.readyState === WebSocket.OPEN) {
-            console.log("--------------------------------");
-            console.log("handling server messages", WebSocket.OPEN, clientWs.readyState);
-            console.log("--------------------------------");
+            console.log("[SERVER->CLIENT] Forwarding processed message");
             clientWs.send(processedMsg);
+          } else {
+            console.log("[SERVER->CLIENT] Message dropped or connection closed");
           }
         } catch (error) {
-          console.error('Error processing server message:', error);
+          console.error("[ERROR] Processing server message:", error);
         }
       });
     };
@@ -319,7 +353,7 @@ export class RTMiddleTier {
     try {
       await Promise.all([handleClientMessages(), handleServerMessages()]);
     } catch (error) {
-      console.error('WebSocket error:', error);
+      console.error("[ERROR] WebSocket handling error:", error);
       if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
       if (serverWs.readyState === WebSocket.OPEN) serverWs.close();
     }
@@ -356,5 +390,15 @@ export class RTMiddleTier {
   // Method to add tools
   public addTool(name: string, tool: Tool): void {
     this.tools.set(name, tool);
+  }
+
+  private getHeaders(): { [key: string]: string } {
+    const headers: { [key: string]: string } = {};
+    if (this.key) {
+      headers['api-key'] = this.key;
+    } else if (this.tokenProvider) {
+      headers['Authorization'] = `Bearer ${this.tokenProvider()}`;
+    }
+    return headers;
   }
 }
