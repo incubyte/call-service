@@ -30,6 +30,12 @@ export async function sendAudioToExternalAi(data: string) {
 }
 
 export async function startConversation() {
+
+    console.log({openAiDeploymentModel,
+        openAiServiceEndpoint,
+        openAiKey
+    })
+    
     await startRealtime(openAiServiceEndpoint, openAiKey, openAiDeploymentModel);
 }
 
@@ -93,7 +99,7 @@ function createConfigMessage(): SessionUpdateMessage {
                 {
                     type: "function",
                     name: "referToMedicalDatabase",
-                    desciption: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
+                    description: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
                     parameters: {
                         type: "object",
                         properties: {
@@ -101,9 +107,11 @@ function createConfigMessage(): SessionUpdateMessage {
                                 type: "string",
                                 description: "User query to refer to medical database"
                             }    
-                        }
+                        },
+                        required: ["user_query"],
+                        additionalProperties: false
                     }
-                }                
+                }
             ],
             tool_choice: "auto",
         }
