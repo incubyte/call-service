@@ -19,8 +19,8 @@ const rtMiddleTier = new RTMiddleTier({
   voiceChoice: process.env.VOICE_CHOICE ?? 'alloy',
 });
 
-// Setup middleware
-setupWebSocketMiddleware(app, rtMiddleTier, '/ws');
+// Attach RTMiddleTier to the server directly instead of using middleware
+rtMiddleTier.attachToServer(server, '/ws');
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

@@ -1,0 +1,21 @@
+{
+    "app": {
+        "title": "REALTIME CUSTOM VOICEBOT",
+        "footer": "Trained on your Personal Data",
+        "stopRecording": "Stop MIC",
+        "startRecording": "Start MIC",
+        "stopConversation": "Stop conversation"
+    },
+    "status": {
+        "notRecordingMessage": "Vicroads Driving Rules and Victoria Real Estate Assistant",
+        "conversationInProgress": "Conversation in progress"
+    },
+    "history": {
+        "answerHistory": "Answer history",
+        "noHistory": "No history yet."
+    },
+    "groundingFiles": {
+        "title": "Grounding files",
+        "description": "Files used to ground the answers."
+    }
+}

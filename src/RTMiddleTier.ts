@@ -174,6 +174,10 @@ export class RTMiddleTier {
       headers['Authorization'] = `Bearer ${this.tokenProvider()}`;
     }
 
+    console.log("--------------------------------");
+    console.log(`${this.endpoint}/openai/realtime?api-version=${this.apiVersion}&deployment=${this.deployment}`);
+    console.log("--------------------------------");
+
     const serverWs = new WSClient(
       `${this.endpoint}/openai/realtime?api-version=${this.apiVersion}&deployment=${this.deployment}`,
       {
@@ -228,7 +232,12 @@ export class RTMiddleTier {
   public attachToServer(server: any, path: string): void {
     const wss = new WebSocketServer({ noServer: true });
 
+
     server.on('upgrade', (request: any, socket: any, head: any) => {
+      console.log("--------------------------------");
+      console.log(request.url);
+      console.log(path);
+      console.log("--------------------------------");
       if (request.url === path) {
         wss.handleUpgrade(request, socket, head, (ws) => {
           this.handleConnection(ws);
