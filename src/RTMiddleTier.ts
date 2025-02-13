@@ -278,10 +278,10 @@ export class RTMiddleTier {
     return updatedMessage;
   }
 
-  private async handleConnection(clientWs: WebSocket): Promise<void> {
+  private async handleConnection(serverWs: WebSocket): Promise<void> {
     console.log("[CONNECT] New client connection attempting to establish");
     
-    const serverWs = new WebSocket(
+    const openaiWs = new WebSocket(
       `${this.endpoint}/openai/realtime?api-version=${this.apiVersion}&deployment=${this.deployment}`,
       {
         headers: this.getHeaders(),
@@ -290,11 +290,11 @@ export class RTMiddleTier {
 
     // Wait for server connection
     await new Promise((resolve, reject) => {
-      serverWs.on('open', () => {
+      openaiWs.on('open', () => {
         console.log("[CONNECT] Server WebSocket connection established");
         resolve(true);
       });
-      serverWs.on('error', (error) => {
+      openaiWs.on('error', (error) => {
         console.error("[ERROR] Server WebSocket connection failed:", error);
         reject(error);
       });
@@ -302,15 +302,15 @@ export class RTMiddleTier {
     });
 
     const handleClientMessages = async () => {
-      clientWs.on('message', async (data: WebSocket.Data) => {
+      serverWs.on('message', async (data: WebSocket.Data) => {
         try {
           const msg = JSON.parse(data.toString());
           console.log("[CLIENT->SERVER] Message type:", msg.type);
           
           const processedMsg = await this.processMessageToServer(msg);
-          if (processedMsg && serverWs.readyState === WebSocket.OPEN) {
+          if (processedMsg && openaiWs.readyState === WebSocket.OPEN) {
             console.log("[CLIENT->SERVER] Forwarding processed message");
-            serverWs.send(processedMsg);
+            openaiWs.send(processedMsg);
           } else {
             console.log("[CLIENT->SERVER] Message dropped or connection closed");
           }
@@ -319,16 +319,16 @@ export class RTMiddleTier {
         }
       });
 
-      clientWs.on('close', () => {
+      serverWs.on('close', () => {
         console.log("[DISCONNECT] Client connection closed");
-        if (serverWs.readyState === WebSocket.OPEN) {
-          serverWs.close();
+        if (openaiWs.readyState === WebSocket.OPEN) {
+          openaiWs.close();
         }
       });
     };
 
     const handleServerMessages = async () => {
-      serverWs.on('message', async (data: WebSocket.Data) => {
+      openaiWs.on('message', async (data: WebSocket.Data) => {
         try {
           const msg = JSON.parse(data.toString());
           console.log("[SERVER->CLIENT] Message type:", msg.type);
@@ -337,10 +337,10 @@ export class RTMiddleTier {
             console.log("[TOOL] Function call detected:", msg.item.name);
           }
 
-          const processedMsg = await this.processMessageToClient(msg, clientWs, serverWs);
-          if (processedMsg && clientWs.readyState === WebSocket.OPEN) {
+          const processedMsg = await this.processMessageToClient(msg, serverWs, openaiWs);
+          if (processedMsg && serverWs.readyState === WebSocket.OPEN) {
             console.log("[SERVER->CLIENT] Forwarding processed message");
-            clientWs.send(processedMsg);
+            serverWs.send(processedMsg);
           } else {
             console.log("[SERVER->CLIENT] Message dropped or connection closed");
           }
@@ -354,8 +354,8 @@ export class RTMiddleTier {
       await Promise.all([handleClientMessages(), handleServerMessages()]);
     } catch (error) {
       console.error("[ERROR] WebSocket handling error:", error);
-      if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
       if (serverWs.readyState === WebSocket.OPEN) serverWs.close();
+      if (openaiWs.readyState === WebSocket.OPEN) openaiWs.close();
     }
   }
 
