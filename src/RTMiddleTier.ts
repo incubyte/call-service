@@ -4,6 +4,50 @@ import { Tool, ToolResult, RTToolCall, Session, RTMiddleTierConfig, ToolResultDi
 import { WebSocketServer } from 'ws';
 import { WebSocket as WSClient } from 'ws';
 
+async function referToMedicalDatabase(user_query: string): Promise<ToolResult> {
+
+  console.log("--------------------------------");
+  console.log("user_query | referToMedicalDatabase", user_query);
+  console.log("--------------------------------");
+
+  try {
+      console.log('Referring to medical database for: ', user_query);
+      let response = "";
+      if (user_query.match(/appointment/i)) {
+          response = "You have an appointment with Dr. Smith on 12th August 2021 at 10:00 AM";
+      } else if (user_query.match(/prescription/i)) {
+          response = "You have a prescription for 5mg of Lisinopril";
+      } else if (user_query.match(/lab results/i)) {
+          response = "Your lab results are normal";
+      } else {
+          response = "Please call back after some time";
+      }
+      return {
+          text: response,
+          destination: ToolResultDirection.TO_CLIENT
+      };
+  } catch (error) {
+      console.error('Error referring to medical database:', error);
+      throw error;
+  }
+}
+
+const referToMedicalDatabaseToolSchema = {
+  type: "function",
+  name: "referToMedicalDatabase",
+  description: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
+  parameters: {
+      type: "object",
+      properties: {
+          user_query: {
+              type: "string",
+              description: "User query to refer to medical database"
+          }    
+      },
+      required: ["user_query"]
+  }
+};
+
 export class RTMiddleTier {
   private endpoint: string;
   private deployment: string;
@@ -29,6 +73,11 @@ export class RTMiddleTier {
     this.maxTokens = config.maxTokens;
     this.disableAudio = config.disableAudio;
 
+    this.tools.set('referToMedicalDatabase', {
+      target: referToMedicalDatabase,
+      schema: referToMedicalDatabaseToolSchema
+    });
+
     if (config.credentials.key) {
       this.key = config.credentials.key;
     } else {
@@ -46,13 +95,21 @@ export class RTMiddleTier {
   ): Promise<string | null> {
     let updatedMessage = JSON.stringify(message);
 
+    if(!message.type.startsWith("input_audio_buffer")) {
+      // console.log("--------------------------------");
+      // console.log("message.type | client", message.type);
+      // console.log("--------------------------------");
+    }
+
     switch (message.type) {
       case 'session.created':
         const session = message.session;
-        session.instructions = '';
-        session.tools = [];
+        session.instructions = 'You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them.';
+        session.tools = [
+          referToMedicalDatabaseToolSchema
+        ];
         session.voice = this.voiceChoice;
-        session.tool_choice = 'none';
+        session.tool_choice = 'auto';
         session.max_response_output_tokens = null;
         updatedMessage = JSON.stringify(message);
         break;
@@ -64,6 +121,10 @@ export class RTMiddleTier {
         break;
 
       case 'conversation.item.created':
+        console.log("--------------------------------");
+        console.log("message.item.type | client", message.item.type);
+        console.log("--------------------------------");
+
         if (message.item?.type === 'function_call') {
           const item = message.item;
           if (!this.toolsPending.has(item.call_id)) {
@@ -74,6 +135,7 @@ export class RTMiddleTier {
           }
           updatedMessage = null;
         } else if (message.item?.type === 'function_call_output') {
+          console.log(message.item.output);
           updatedMessage = null;
         }
         break;
@@ -84,6 +146,10 @@ export class RTMiddleTier {
         break;
 
       case 'response.output_item.done':
+        // console.log("--------------------------------");
+        // console.log("message.item.type | client", message.item.type);
+        // console.log("--------------------------------");
+
         if (message.item?.type === 'function_call') {
           const item = message.item;
           const toolCall = this.toolsPending.get(item.call_id);
@@ -146,9 +212,14 @@ export class RTMiddleTier {
 
   private async processMessageToServer(
     message: any,
-    ws: WebSocket
   ): Promise<string | null> {
     let updatedMessage = JSON.stringify(message);
+
+    if(!message.type.startsWith("input_audio_buffer")) {
+      // console.log("--------------------------------");
+      // console.log("message.type | server", message.type);
+      // console.log("--------------------------------");
+    }
 
     if (message.type === 'session.update') {
       const session: Session = message.session;
@@ -158,6 +229,9 @@ export class RTMiddleTier {
       if (this.disableAudio !== undefined) session.disable_audio = this.disableAudio;
       if (this.voiceChoice) session.voice = this.voiceChoice;
       session.tool_choice = this.tools.size > 0 ? 'auto' : 'none';
+      // console.log("--------------------------------");
+      // console.log("session.tool_choice | server", session.tool_choice);
+      // console.log("--------------------------------");
       session.tools = Array.from(this.tools.values()).map(tool => tool.schema);
       updatedMessage = JSON.stringify(message);
       console.log(updatedMessage);
@@ -166,17 +240,13 @@ export class RTMiddleTier {
     return updatedMessage;
   }
 
-  private async handleConnection(ws: WebSocket): Promise<void> {
+  private async handleConnection(clientWs: WebSocket): Promise<void> {
     const headers: { [key: string]: string } = {};
     if (this.key) {
       headers['api-key'] = this.key;
     } else if (this.tokenProvider) {
       headers['Authorization'] = `Bearer ${this.tokenProvider()}`;
     }
-
-    console.log("--------------------------------");
-    console.log(`${this.endpoint}/openai/realtime?api-version=${this.apiVersion}&deployment=${this.deployment}`);
-    console.log("--------------------------------");
 
     const serverWs = new WSClient(
       `${this.endpoint}/openai/realtime?api-version=${this.apiVersion}&deployment=${this.deployment}`,
@@ -185,12 +255,30 @@ export class RTMiddleTier {
       }
     );
 
+    // Wait for server connection to be established
+    await new Promise((resolve, reject) => {
+      serverWs.on('open', () => {
+        console.log("Server connection established");
+        resolve(true);
+      });
+      serverWs.on('error', reject);
+      // Add timeout
+      setTimeout(() => reject(new Error('Connection timeout')), 10000);
+    });
+
+    serverWs.on('close', () => {
+      console.log("server connection closed");
+    });
+
     const handleClientMessages = async () => {
-      ws.on('message', async (data: WebSocket.Data) => {
+      clientWs.on('message', async (data: WebSocket.Data) => {
+        // console.log("--------------------------------");
+        // console.log("handling client messages");
+        // console.log("--------------------------------");
         try {
           const msg = data.toString();
-          const processedMsg = await this.processMessageToServer(JSON.parse(msg), ws);
-          if (processedMsg) {
+          const processedMsg = await this.processMessageToServer(JSON.parse(msg));
+          if (processedMsg && serverWs.readyState === WebSocket.OPEN) {
             serverWs.send(processedMsg);
           }
         } catch (error) {
@@ -198,9 +286,12 @@ export class RTMiddleTier {
         }
       });
 
-      ws.on('close', () => {
+      clientWs.on('close', () => {
         console.log('Client connection closed');
-        serverWs.close();
+        if (serverWs.readyState === WebSocket.OPEN) {
+          console.log("closing server connection");
+          serverWs.close();
+        }
       });
     };
 
@@ -210,11 +301,14 @@ export class RTMiddleTier {
           const msg = data.toString();
           const processedMsg = await this.processMessageToClient(
             JSON.parse(msg),
-            ws,
+            clientWs,
             serverWs
           );
-          if (processedMsg) {
-            ws.send(processedMsg);
+          if (processedMsg && clientWs.readyState === WebSocket.OPEN) {
+            console.log("--------------------------------");
+            console.log("handling server messages", WebSocket.OPEN, clientWs.readyState);
+            console.log("--------------------------------");
+            clientWs.send(processedMsg);
           }
         } catch (error) {
           console.error('Error processing server message:', error);
@@ -226,18 +320,15 @@ export class RTMiddleTier {
       await Promise.all([handleClientMessages(), handleServerMessages()]);
     } catch (error) {
       console.error('WebSocket error:', error);
+      if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
+      if (serverWs.readyState === WebSocket.OPEN) serverWs.close();
     }
   }
 
   public attachToServer(server: any, path: string): void {
     const wss = new WebSocketServer({ noServer: true });
 
-
     server.on('upgrade', (request: any, socket: any, head: any) => {
-      console.log("--------------------------------");
-      console.log(request.url);
-      console.log(path);
-      console.log("--------------------------------");
       if (request.url === path) {
         wss.handleUpgrade(request, socket, head, (ws) => {
           this.handleConnection(ws);
