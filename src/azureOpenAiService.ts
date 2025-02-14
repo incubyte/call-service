@@ -123,17 +123,16 @@ function createConfigMessage(): SessionUpdateMessage {
 async function executeFunctionCall(message: ServerMessageType) {
     try {
         const functionCallMessage = message as ResponseFunctionCallArgumentsDoneMessage;
-        const result = await referToMedicalDatabase(functionCallMessage.arguments);
+
+        console.log("--------------------------------")
+        console.log(`Type of arguments: ${typeof functionCallMessage.arguments}`);
+        console.log("--------------------------------")
+
+        const argumentsObject = JSON.parse(functionCallMessage.arguments);
+
+        const result = await referToMedicalDatabase(argumentsObject.user_query);
         console.log("Function Call Results:", result);
-        // const responseMessage: ItemCreateMessage = {
-        //     type: "conversation.item.create",
-        //     item: {
-        //         type: "function_call_output",
-        //         call_id: functionCallMessage.call_id,
-        //         output: result
-        //     }
-        // };
-        // await realtimeStreaming.send(responseMessage);
+        return result;
     } catch (error) {
         console.error('Error handling function call:', error);
     }
@@ -149,7 +148,18 @@ export async function handleRealtimeMessages() {
                 break;
             case "response.function_call_arguments.done":
                 console.log("Function call arguments done");
-                await executeFunctionCall(message);
+                const result = await executeFunctionCall(message);
+                console.log("Function Call Results:", result);
+
+                const responseMessage: ItemCreateMessage = {
+                    type: "conversation.item.create",
+                    item: {
+                        type: "function_call_output",
+                        call_id: message.call_id,
+                        output: result
+                    }
+                };
+                await realtimeStreaming.send(responseMessage);
                 break;
             case "response.audio.delta":
                 await receiveAudioForOutbound(message.delta)
