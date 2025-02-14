@@ -10,7 +10,7 @@ const openAiServiceEndpoint = process.env.AZURE_OPENAI_SERVICE_ENDPOINT || "";
 const openAiKey = process.env.AZURE_OPENAI_SERVICE_KEY || "";
 const openAiDeploymentModel = process.env.AZURE_OPENAI_DEPLOYMENT_MODEL_NAME || "";
 
-const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them.`
+const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them. Respond with exact same text that you got from function call.`
 
 let realtimeStreaming: LowLevelRTClient;
 
@@ -60,19 +60,35 @@ async function startRealtime(endpoint: string, apiKey: string, deploymentOrModel
 }
 
 
-async function referToMedicalDatabase(user_query: string): Promise<any> {
+async function referToAICompanion(user_query: string): Promise<any> {
     try {
         console.log('Referring to medical database for: ', user_query);
-        if (user_query.match(/appointment/i)) {
-            return "You have an appointment with Dr. Smith on 12th August 2021 at 10:00 AM";
+        
+        const response = await fetch('http://localhost:3000/api/tenant-a/chat/abc123', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify([
+                {
+                    "role": "user",
+                    "content": user_query
+                }
+            ])
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
-        if (user_query.match(/prescription/i)) {
-            return "You have a prescription for 5mg of Lisinopril";
-        }
-        if (user_query.match(/lab results/i)) {
-            return "Your lab results are normal";
-        }
-        return "Please call back after some time";
+
+        const data = await response.json();
+
+        console.log("--------------------------------")
+        console.log("Medical Database Response:", data.answer);
+        console.log("--------------------------------")
+
+        return data.answer;
+
     } catch (error) {
         console.error('Error referring to medical database:', error);
         throw error;
@@ -95,17 +111,18 @@ function createConfigMessage(): SessionUpdateMessage {
             input_audio_transcription: {
                 model: "whisper-1"
             },
+            temperature: 0,
             tools: [
                 {
                     type: "function",
-                    name: "referToMedicalDatabase",
-                    description: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
+                    name: "referToAICompanion",
+                    description: "You can call this function to get information about AI companion and Vaalee. Vaalee is a AI companion that can help you with your questions.",
                     parameters: {
                         type: "object",
                         properties: {
                             user_query: {
                                 type: "string",
-                                description: "User query to refer to medical database"
+                                description: "User query to refer to AI companion and Vaalee"
                             }    
                         },
                         required: ["user_query"],
@@ -130,7 +147,7 @@ async function executeFunctionCall(message: ServerMessageType) {
 
         const argumentsObject = JSON.parse(functionCallMessage.arguments);
 
-        const result = await referToMedicalDatabase(argumentsObject.user_query);
+        const result = await referToAICompanion(argumentsObject.user_query);
         console.log("Function Call Results:", result);
         return result;
     } catch (error) {
