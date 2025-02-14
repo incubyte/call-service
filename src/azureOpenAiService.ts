@@ -10,7 +10,26 @@ const openAiServiceEndpoint = process.env.AZURE_OPENAI_SERVICE_ENDPOINT || "";
 const openAiKey = process.env.AZURE_OPENAI_SERVICE_KEY || "";
 const openAiDeploymentModel = process.env.AZURE_OPENAI_DEPLOYMENT_MODEL_NAME || "";
 
-const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. After that ask them how you can help them`
+const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them.`
+
+async function referToMedicalDatabase({user_query}: {user_query: string}): Promise<any> {
+    try {
+        console.log('Referring to medical database for: ', user_query);
+        if (user_query.match(/appointment/i)) {
+            return "You have an appointment with Dr. Smith on 12th August 2021 at 10:00 AM";
+        }
+        if (user_query.match(/prescription/i)) {
+            return "You have a prescription for 5mg of Lisinopril";
+        }
+        if (user_query.match(/lab results/i)) {
+            return "Your lab results are normal";
+        }
+        return "Please call back after some time";
+    } catch (error) {
+        console.error('Error referring to medical database:', error);
+        throw error;
+    }
+}
 
 export async function sendAudioToExternalAi(data: string) {
     try {
@@ -57,7 +76,7 @@ async function startRealtime(endpoint: string, apiKey: string, deploymentOrModel
 
         aiWs.on('message', async (data) => {
             const parsedMessage = JSON.parse(data.toString());
-            console.log("Received message:", parsedMessage.type);
+            // console.log("Received message:", parsedMessage.type, parsedMessage);  // Log full message for debugging
             await handleRealtimeMessages(parsedMessage);
         });
 
@@ -87,7 +106,24 @@ function createConfigMessage() {
             },
             input_audio_transcription: {
                 model: "whisper-1"
-            }
+            },
+            tools: [
+                {
+                    type: "function",
+                    name: "referToMedicalDatabase",
+                    description: "You can call this function to get the refer to medical database when asked for appointment, prescription or lab results.",
+                    parameters: {
+                        type: "object",
+                        properties: {
+                            user_query: {
+                                type: "string",
+                                description: "User query to refer to medical database"
+                            }    
+                        }
+                    }
+                }                
+            ],
+            tool_choice: "auto"
         }
     };
 }
@@ -98,11 +134,14 @@ export async function handleRealtimeMessages(message: any) {
             case "session.created":
                 console.log("session started with id:-->" + message.session.id);
                 break;
+            case "session.updated":
+                // Handle session update message
+                break;
             case "response.audio_transcript.delta":
                 console.log("Received transcript delta:", message);
                 break;
             case "response.audio.delta":
-                console.log("Received audio delta");
+                console.log("Received audio delta:", message.delta.length);  // Log audio data length
                 await receiveAudioForOutbound(message.delta);
                 break;
             case "input_audio_buffer.speech_started":
@@ -115,11 +154,16 @@ export async function handleRealtimeMessages(message: any) {
             case "response.audio_transcript.done":
                 console.log(`AI:- ${message.transcript}`);
                 break;
+            case "response.function_call_arguments.done":
+                console.log("Function call arguments received:", message.arguments);
+                const result = await referToMedicalDatabase(JSON.parse(message.arguments));
+                console.log("Function call result:", result);
+                break;
             case "response.done":
                 console.log("Response status:", message.response.status);
                 break;
             default:
-                console.log("Unhandled message type:", message.type);
+                console.log("Unhandled message type:", message.type, message);  // Log full unhandled messages
                 break;
         }
     } catch (error) {
@@ -144,6 +188,7 @@ async function stopAudio() {
 
 async function receiveAudioForOutbound(data: string) {
     try {
+        console.log("Processing audio data of length:", data.length);  // Add debug logging
         const jsonData = OutStreamingData.getStreamingDataForOutbound(data);
         await sendMessage(jsonData);
     }
@@ -160,6 +205,7 @@ async function sendMessage(data: string) {
     
     if (ws.readyState === WebSocket.OPEN) {
         ws.send(data);
+        console.log("Sent audio data successfully");  // Add confirmation log
     } else {
         console.error(`Socket connection is not open. Current state: ${ws.readyState}`);
     }
