@@ -10,7 +10,10 @@ const openAiServiceEndpoint = process.env.AZURE_OPENAI_SERVICE_ENDPOINT || "";
 const openAiKey = process.env.AZURE_OPENAI_SERVICE_KEY || "";
 const openAiDeploymentModel = process.env.AZURE_OPENAI_DEPLOYMENT_MODEL_NAME || "";
 
-const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Say Hello at the start of the call. And ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them. Respond with exact same text that you got from function call.`
+// https://techcommunity.microsoft.com/blog/azure-ai-services-blog/voice-bot-gpt-4o-realtime-best-practices---a-learning-from-customer-journey/4373584
+// specify in prompt for more human like conversation
+// numbers are not good with the voice
+const answerPromptSystemTemplate = `You are an AI assistant that helps people find information. Warmly greet the person and ask for the name of the person speaking. Wait for some time before he responds. After that ask them how you can help them. Respond with exact same text that you got from function call.`
 
 let realtimeStreaming: LowLevelRTClient;
 
@@ -78,7 +81,7 @@ async function referToAICompanion(user_query: string): Promise<any> {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            return "Sorry, I couldn't find the information you're looking for. Please try again."
         }
 
         const data = await response.json();
@@ -91,7 +94,7 @@ async function referToAICompanion(user_query: string): Promise<any> {
 
     } catch (error) {
         console.error('Error referring to medical database:', error);
-        throw error;
+        return "Sorry, I couldn't find the information you're looking for. Please try again."
     }
 }
 
@@ -106,12 +109,12 @@ function createConfigMessage(): SessionUpdateMessage {
             input_audio_format: "pcm16",
             output_audio_format: "pcm16",
             turn_detection: {
-                type: "server_vad",
+                type: "server_vad", // server_vad this is for the voice detection
             },
             input_audio_transcription: {
                 model: "whisper-1"
             },
-            temperature: 0,
+            // temperature: 0, // this should be more than 0.6 otherwise it will give error
             tools: [
                 {
                     type: "function",
@@ -141,10 +144,6 @@ async function executeFunctionCall(message: ServerMessageType) {
     try {
         const functionCallMessage = message as ResponseFunctionCallArgumentsDoneMessage;
 
-        console.log("--------------------------------")
-        console.log(`Type of arguments: ${typeof functionCallMessage.arguments}`);
-        console.log("--------------------------------")
-
         const argumentsObject = JSON.parse(functionCallMessage.arguments);
 
         const result = await referToAICompanion(argumentsObject.user_query);
@@ -154,6 +153,12 @@ async function executeFunctionCall(message: ServerMessageType) {
         console.error('Error handling function call:', error);
     }
 }
+
+// try to put audio delta in .wav file locally
+
+
+// when you try to update a context just create new session and update the context there
+// if you try to delete conversation item it won't work
 
 export async function handleRealtimeMessages() {
     for await (const message of realtimeStreaming.messages()) {
@@ -172,30 +177,45 @@ export async function handleRealtimeMessages() {
                     type: "conversation.item.create",
                     item: {
                         type: "function_call_output",
-                        call_id: message.call_id,
+                        call_id: message.call_id,   // this call connection id is unique for parallel calls
                         output: result
                     }
                 };
                 await realtimeStreaming.send(responseMessage);
+
+                // send this for getting response back
+                realtimeStreaming.send({
+                    type: "response.create",
+                })
+
                 break;
             case "response.audio.delta":
                 await receiveAudioForOutbound(message.delta)
                 break;
             case "input_audio_buffer.speech_started":
+                // you have to truncate the response of AI here
                 console.log(`Voice activity detection started at ${message.audio_start_ms} ms`)
                 stopAudio();
                 break;
+
+            // connect this transcript with the new web socket to show in the UI
             case "conversation.item.input_audio_transcription.completed":
                 console.log(`User:- ${message.transcript}`)
                 break;
             case "response.audio_transcript.done":
                 console.log(`AI:- ${message.transcript}`)
-                break
+                break;
+            // ------------------------------------------------------------
+
+
             case "response.done":
                 console.log(message.response.status)
                 break;
+            case 'error':
+                console.log(message.error)
+                break;
             default:
-                break
+                break;
         }
     }
 }

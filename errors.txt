@@ -1,0 +1,133 @@
+
+sent
+session started with id:-->sess_B0mVgh5DhkswcMEhiHbJf
+AI:- Hello! May I know who's speaking?
+completed
+Error during the incoming call event. RestError: IDX23010: Lifetime validation of the signed http request failed. Current time: '2/14/2025 9:43:05 AM' UTC, signed http request is valid until: '2/14/2025 9:41:17 AM' UTC. 
+ {
+  "name": "RestError",
+  "statusCode": 400,
+  "details": {},
+  "request": {
+    "url": "https://cortex-acs-resource.unitedstates.communication.azure.com/calling/callConnections:answer?api-version=2024-11-15-preview",
+    "headers": {
+      "content-type": "application/json",
+      "accept": "application/json",
+      "repeatability-request-id": "REDACTED",
+      "repeatability-first-sent": "REDACTED",
+      "accept-encoding": "gzip,deflate",
+      "user-agent": "azsdk-js-communication-call-automation/1.3.0-beta.3 core-rest-pipeline/1.19.0 Node/23.7.0 OS/(arm64-Darwin-24.3.0)",
+      "x-ms-client-request-id": "9fd40dcf-4ee3-4d3a-a330-d34a528945bd",
+      "host": "REDACTED",
+      "x-ms-date": "REDACTED",
+      "x-ms-content-sha256": "REDACTED",
+      "authorization": "REDACTED",
+      "content-length": "8674"
+    },
+    "method": "POST",
+    "timeout": 0,
+    "disableKeepAlive": false,
+    "streamResponseStatusCodes": {},
+    "withCredentials": false,
+    "requestId": "9fd40dcf-4ee3-4d3a-a330-d34a528945bd",
+    "allowInsecureConnection": false,
+    "enableBrowserStreams": false
+  }
+}
+Answer call ConnectionId:--> 0c004880-2ad4-4cda-bde0-530d164eb72d
+Received Event:-> Microsoft.Communication.AnswerFailed, Correlation Id:-> e0bd0105-af2b-475d-903d-422d4e459257, CallConnectionId:-> 0c004880-2ad4-4cda-bde0-530d164eb72d
+
+
+
+pnpm dev
+
+> callautomation_az_openai_voice@1.0.0 dev /Users/visrutincubyte/dev/cortex/call-service
+> nodemon ./src/app.ts
+
+[nodemon] 2.0.22
+[nodemon] to restart at any time, enter `rs`
+[nodemon] watching path(s): *.*
+[nodemon] watching extensions: ts,json
+[nodemon] starting `ts-node ./src/app.ts`
+WebSocket server running on port 8080
+Server is listening on port 8080
+Initialized ACS Client.
+Answer call ConnectionId:--> 0e004a80-b46a-4aa4-ab24-54af6818da91
+Error during the incoming call event. RestError: IDX23010: Lifetime validation of the signed http request failed. Current time: '2/14/2025 9:51:57 AM' UTC, signed http request is valid until: '2/14/2025 9:50:24 AM' UTC. 
+ {
+  "name": "RestError",
+  "statusCode": 400,
+  "details": {},
+  "request": {
+    "url": "https://cortex-acs-resource.unitedstates.communication.azure.com/calling/callConnections:answer?api-version=2024-11-15-preview",
+    "headers": {
+      "content-type": "application/json",
+      "accept": "application/json",
+      "repeatability-request-id": "REDACTED",
+      "repeatability-first-sent": "REDACTED",
+      "accept-encoding": "gzip,deflate",
+      "user-agent": "azsdk-js-communication-call-automation/1.3.0-beta.3 core-rest-pipeline/1.19.0 Node/23.7.0 OS/(arm64-Darwin-24.3.0)",
+      "x-ms-client-request-id": "c1c79a49-bcb3-478a-b55d-ca3cb3b23529",
+      "host": "REDACTED",
+      "x-ms-date": "REDACTED",
+      "x-ms-content-sha256": "REDACTED",
+      "authorization": "REDACTED",
+      "content-length": "8674"
+    },
+    "method": "POST",
+    "timeout": 0,
+    "disableKeepAlive": false,
+    "streamResponseStatusCodes": {},
+    "withCredentials": false,
+    "requestId": "c1c79a49-bcb3-478a-b55d-ca3cb3b23529",
+    "allowInsecureConnection": false,
+    "enableBrowserStreams": false
+  }
+}
+Received Event:-> Microsoft.Communication.CallConnected, Correlation Id:-> 96e024a6-98a7-4118-8969-6ddd6e0700c3, CallConnectionId:-> 0e004a80-b46a-4aa4-ab24-54af6818da91
+MediaStreamingSubscription:-->{"id":"b5b4ca4e-cc79-48f2-8e0e-814f44633871","state":"active","subscribedContentTypes":["audio"]}
+Client connected
+{
+  openAiDeploymentModel: 'gpt-4o-realtime-preview',
+  openAiServiceEndpoint: 'https://visru-m71ihxwz-eastus2.cognitiveservices.azure.com',
+  openAiKey: '5ZgyG3OLniF989MwzjJmT3TIZeuCEUm6vvD3M2WuNcpuWFgQeNuaJQQJ99BBACHYHv6XJ3w3AAAAACOGmihA'
+}
+sending session config
+Received Event:-> Microsoft.Communication.ParticipantsUpdated, Correlation Id:-> 96e024a6-98a7-4118-8969-6ddd6e0700c3, CallConnectionId:-> 0e004a80-b46a-4aa4-ab24-54af6818da91
+sent
+session started with id:-->sess_B0meZOYXtzdHigxnKo459
+Client connected
+{
+  openAiDeploymentModel: 'gpt-4o-realtime-preview',
+  openAiServiceEndpoint: 'https://visru-m71ihxwz-eastus2.cognitiveservices.azure.com',
+  openAiKey: '5ZgyG3OLniF989MwzjJmT3TIZeuCEUm6vvD3M2WuNcpuWFgQeNuaJQQJ99BBACHYHv6XJ3w3AAAAACOGmihA'
+}
+sending session config
+Received Event:-> Microsoft.Communication.MediaStreamingStarted, Correlation Id:-> 96e024a6-98a7-4118-8969-6ddd6e0700c3, CallConnectionId:-> 0e004a80-b46a-4aa4-ab24-54af6818da91
+Operation context:--> undefined
+Media streaming content type:--> Audio
+Media streaming status:--> mediaStreamingStarted
+Media streaming status details:--> subscriptionStarted
+sent
+session started with id:-->sess_B0mec3xvNPIiIwnHSXucW
+Client connected
+{
+  openAiDeploymentModel: 'gpt-4o-realtime-preview',
+  openAiServiceEndpoint: 'https://visru-m71ihxwz-eastus2.cognitiveservices.azure.com',
+  openAiKey: '5ZgyG3OLniF989MwzjJmT3TIZeuCEUm6vvD3M2WuNcpuWFgQeNuaJQQJ99BBACHYHv6XJ3w3AAAAACOGmihA'
+}
+sending session config
+sent
+session started with id:-->sess_B0mee4j2sjNKTEm8B3QcM
+Voice activity detection started at 1152 ms
+User:- Hello, hello
+
+Client disconnected
+Received Event:-> Microsoft.Communication.MediaStreamingFailed, Correlation Id:-> 96e024a6-98a7-4118-8969-6ddd6e0700c3, CallConnectionId:-> 0e004a80-b46a-4aa4-ab24-54af6818da91
+Operation context:--> undefined
+Code:->400, Subcode:->8581
+Message:->Action failed, Transport url is not valid or web socket server is not operational.
+AI:- Hello! May I know your name, please?
+completed
+Received Event:-> Microsoft.Communication.CallDisconnected, Correlation Id:-> 96e024a6-98a7-4118-8969-6ddd6e0700c3, CallConnectionId:-> 0e004a80-b46a-4aa4-ab24-54af6818da91
+Answer call ConnectionId:--> 15004780-dca3-4269-8fb8-cc307715254b
