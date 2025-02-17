@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import { config } from 'dotenv';
 import { LowLevelRTClient, SessionUpdateMessage, ServerMessageType, ResponseFunctionCallArgumentsDoneMessage, ItemCreateMessage } from "rt-client";
 import { OutStreamingData } from '@azure/communication-call-automation';
+import { getRetriever } from './retrieval-service';
 config();
 
 let ws: WebSocket;
@@ -66,32 +67,13 @@ async function startRealtime(endpoint: string, apiKey: string, deploymentOrModel
 async function referToAICompanion(user_query: string): Promise<any> {
     try {
         console.log('Referring to medical database for: ', user_query);
-        
-        const response = await fetch('http://localhost:3000/api/tenant-a/chat/abc123', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify([
-                {
-                    "role": "user",
-                    "content": user_query
-                }
-            ])
-        });
 
-        if (!response.ok) {
-            return "Sorry, I couldn't find the information you're looking for. Please try again."
-        }
+        const similarDocs = await getRetriever('tenant-a', user_query);
+        console.log("Similar Docs:", similarDocs);
 
-        const data = await response.json();
+        const similarChunksJoined = similarDocs.context.map(doc => doc.pageContent).join('\n');
 
-        console.log("--------------------------------")
-        console.log("Medical Database Response:", data.answer);
-        console.log("--------------------------------")
-
-        return data.answer;
-
+        return similarChunksJoined;
     } catch (error) {
         console.error('Error referring to medical database:', error);
         return "Sorry, I couldn't find the information you're looking for. Please try again."
